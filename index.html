@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Anomaly Meter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ecebf3; --panel:#f7f6fb; --ink:#221d3a; --muted:#6a6485; --line:#d6d3e4;
+  --calm:#2f9c88; --lantern:#c98a12; --alert:#c73a52;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16132a; --panel:#1f1b38; --ink:#e6e2f6; --muted:#9a93bd; --line:#332d55;
+    --calm:#6fc3b2; --lantern:#f2b84b; --alert:#e5566b;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16132a; --panel:#1f1b38; --ink:#e6e2f6; --muted:#9a93bd; --line:#332d55;
+  --calm:#6fc3b2; --lantern:#f2b84b; --alert:#e5566b;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 Figtree,system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:520px;margin:0 auto;padding:24px 20px 40px}
+h1{font:600 2.1rem/1.1 Fraunces,Georgia,serif;margin:0 0 6px;letter-spacing:-.01em}
+.lede{color:var(--muted);margin:0 0 28px;max-width:44ch}
+
+.aura-wrap{display:grid;place-items:center;margin:8px 0 20px}
+.aura{position:relative;width:min(72vw,280px);aspect-ratio:1;border-radius:50%;
+  background:var(--panel);border:2px solid var(--glow,var(--line));
+  box-shadow:0 0 var(--blur,0px) var(--spread,0px) var(--glow,transparent);
+  overflow:hidden;transition:box-shadow .25s,border-color .25s}
+.aura video{width:100%;height:100%;object-fit:cover;display:block;opacity:.85}
+.aura .readout{position:absolute;inset:0;display:grid;place-items:center;text-align:center;pointer-events:none}
+.score{font:600 3.4rem/1 Fraunces,Georgia,serif;text-shadow:0 1px 8px rgba(0,0,0,.45);color:#fff}
+.aura:not(.live) .score{color:var(--muted);text-shadow:none}
+.state{font-size:.9rem;margin-top:6px;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+.aura:not(.live) .state{color:var(--muted);text-shadow:none}
+
+.actions{display:flex;gap:10px;justify-content:center;margin-bottom:28px;flex-wrap:wrap}
+button{font:600 1rem Figtree,system-ui,sans-serif;border:0;border-radius:999px;padding:12px 22px;cursor:pointer}
+.primary{background:var(--ink);color:var(--bg)}
+.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+button:focus-visible{outline:3px solid var(--lantern);outline-offset:2px}
+button:disabled{opacity:.5;cursor:default}
+
+.sensors{display:grid;gap:14px;margin-bottom:30px}
+.sensor .top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.sensor .name{font-weight:600}
+.sensor .val{color:var(--muted);font-size:.9rem;font-variant-numeric:tabular-nums;text-align:right}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:6px}
+.fill{height:100%;width:0;background:var(--calm);transition:width .15s,background .15s}
+.sensor.off .name,.sensor.off .val{opacity:.55}
+
+h2{font:600 1.25rem Fraunces,Georgia,serif;margin:0 0 10px}
+.log{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.log li{display:flex;gap:12px;align-items:center;background:var(--panel);border-left:3px solid var(--alert);padding:10px 12px;border-radius:0 8px 8px 0}
+.log img{width:64px;height:48px;object-fit:cover;border-radius:4px;flex:none}
+.log time{color:var(--muted);font-size:.85rem;font-variant-numeric:tabular-nums}
+.empty{color:var(--muted);margin:0}
+.note{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:.9rem}
+.err{color:var(--alert);font-size:.9rem;text-align:center;margin:-16px 0 20px;min-height:1em}
+.sens{display:flex;align-items:center;gap:12px;margin:-12px 0 24px}
+.sens label{font-weight:600;flex:none}
+.sens input{flex:1;accent-color:var(--lantern)}
+.sens output{color:var(--muted);font-size:.9rem;width:4.5em;text-align:right}
+.timeline{width:100%;height:70px;display:block;background:var(--panel);border-radius:8px;margin-bottom:6px}
+.tl-cap{color:var(--muted);font-size:.85rem;margin:0 0 26px}
+.log audio{width:100%;height:32px;margin-top:6px}
+.log li>div{flex:1;min-width:0}
+.vision{position:relative;aspect-ratio:4/3;background:#0d0b1a;border-radius:8px;overflow:hidden;margin-bottom:6px}
+.vision video,.vision canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.spec-wrap{position:relative;margin-bottom:6px}
+.spec{width:100%;height:170px;display:block;background:#0d0b1a;border-radius:8px}
+.hline{position:absolute;left:0;right:0;border-top:1.5px dashed var(--lantern);display:none}
+.hline span{position:absolute;right:8px;top:3px;font-size:.75rem;color:#f2b84b;text-shadow:0 1px 3px #000}
+.slow{margin-top:6px;padding:6px 14px;font-size:.85rem;background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Anomaly meter</h1>
+  <p class="lede">Uses your phone's camera, microphone, motion and magnetic sensors to flag anything unusual in the room after a quiet baseline.</p>
+
+  <div class="aura-wrap">
+    <div class="aura" id="aura">
+      <video id="video" playsinline muted></video>
+      <div class="readout"><div><div class="score" id="score">0</div><div class="state" id="state">Not started</div></div></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="startBtn">Start scan</button>
+    <button class="ghost" id="recalBtn" disabled>Recalibrate</button>
+  </div>
+  <p class="err" id="err"></p>
+  <div class="sens">
+    <label for="sens">Sensitivity</label>
+    <input type="range" id="sens" min="1" max="5" step="1" value="3">
+    <output id="sensOut">Medium</output>
+  </div>
+  <h2>Vision</h2>
+  <div class="vision">
+    <video id="v2" playsinline muted></video>
+    <canvas id="ov" aria-label="Camera view with boxes around detected humans and animals"></canvas>
+  </div>
+  <p class="tl-cap" id="visStatus">Starts with the scan. Detects humans, dogs, cats, birds and 70+ other objects.</p>
+
+  <canvas class="timeline" id="tl" aria-label="Anomaly level over the last 60 seconds"></canvas>
+  <p class="tl-cap">Last 60 seconds</p>
+
+  <h2>Sound spectrum</h2>
+  <div class="spec-wrap">
+    <canvas class="spec" id="spec" aria-label="Live sound frequencies, low at the bottom, high at the top"></canvas>
+    <div class="hline" id="hline"><span>Human hearing limit, 20 kHz</span></div>
+  </div>
+  <p class="tl-cap">Low pitch at the bottom, high pitch at the top. Anything bright above the line is a sound you can't hear.</p>
+
+  <section class="sensors" id="sensors"></section>
+
+  <h2>Events</h2>
+  <ul class="log" id="log"></ul>
+  <p class="empty" id="empty">Nothing flagged yet. Keep the phone still during the first 5 seconds.</p>
+
+  <p class="note">Every flag has a physical source: movement or light changes in view, noise, the phone being moved, or nearby wiring, metal and electronics. Use it to find what changed, then look for the cause.</p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const SENSORS = {
+  cam:{label:'Motion in view', unit:'% changed', fmt:v=>v.toFixed(1)},
+  mic:{label:'Sound', unit:'dB', fmt:v=>v.toFixed(0)},
+  ult:{label:'High pitch, 18 to 24 kHz', unit:'dB', fmt:v=>v.toFixed(1)},
+  vib:{label:'Vibration', unit:'m/s²', fmt:v=>v.toFixed(2)},
+  mag:{label:'Magnetic field', unit:'µT', fmt:v=>v.toFixed(1)}
+};
+for (const k in SENSORS){
+  const s = SENSORS[k];
+  Object.assign(s,{on:false,value:null,samples:[],mean:0,std:1,lastEvent:0});
+  const el = document.createElement('div');
+  el.className='sensor off'; el.id='s-'+k;
+  el.innerHTML=`<div class="top"><span class="name">${s.label}</span><span class="val">Waiting</span></div><div class="bar"><div class="fill"></div></div>`;
+  $('sensors').appendChild(el);
+}
+const MIN_STD = {cam:0.5, mic:2, ult:1.5, vib:0.05, mag:1};
+const CAL_MS = 5000;
+let calUntil = 0, running = false, micStream = null, recording = false;
+const SENS = {1:['Low',8],2:['Low-mid',6.5],3:['Medium',5],4:['High',4],5:['Maximum',3]};
+let zTrig = 5;
+$('sens').oninput = e => { const [n,z] = SENS[e.target.value]; $('sensOut').textContent = n; zTrig = z; };
+const hist = [];
+
+function setVal(k, text){ $('s-'+k).querySelector('.val').textContent = text; }
+function setOn(k){ SENSORS[k].on = true; $('s-'+k).classList.remove('off'); setVal(k,'Live'); }
+
+// Camera
+const video = $('video'), cv = document.createElement('canvas'), cx = cv.getContext('2d',{willReadFrequently:true});
+cv.width=80; cv.height=60; let prev=null;
+const snap = document.createElement('canvas'); snap.width=160; snap.height=120;
+function camSample(){
+  if (!video.videoWidth) return;
+  cx.drawImage(video,0,0,80,60);
+  const d = cx.getImageData(0,0,80,60).data, g = new Uint8Array(4800);
+  let changed=0;
+  for (let i=0,j=0;i<d.length;i+=4,j++){
+    g[j]=(d[i]*.3+d[i+1]*.59+d[i+2]*.11)|0;
+    if (prev && Math.abs(g[j]-prev[j])>25) changed++;
+  }
+  prev=g;
+  SENSORS.cam.value = changed/4800*100;
+}
+async function startCam(){
+  try{
+    const st = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject=st; await video.play(); setOn('cam');
+  }catch(e){ setVal('cam','Camera blocked'); }
+}
+
+// Microphone
+let analyser, buf, fa, fbuf, sr=48000, ring, ringPos=0, cap=null;
+async function startMic(){
+  try{
+    const st = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,sampleRate:48000,channelCount:1}});
+    micStream = st;
+    const AC = window.AudioContext||window.webkitAudioContext;
+    let ac; try{ ac = new AC({sampleRate:48000}); }catch(e){ ac = new AC(); }
+    sr = ac.sampleRate;
+    const src = ac.createMediaStreamSource(st);
+    analyser = ac.createAnalyser(); analyser.fftSize=1024; buf=new Float32Array(1024);
+    fa = ac.createAnalyser(); fa.fftSize=2048; fa.smoothingTimeConstant=0.2; fbuf=new Float32Array(1024);
+    src.connect(analyser); src.connect(fa);
+    // Raw recorder: keeps the last 2 seconds so each clip includes the moment of the spike
+    ring = new Float32Array(sr*2);
+    const proc = ac.createScriptProcessor(4096,1,1);
+    proc.onaudioprocess = e => {
+      const inp = e.inputBuffer.getChannelData(0);
+      for (let i=0;i<inp.length;i++){ ring[ringPos]=inp[i]; ringPos=(ringPos+1)%ring.length; }
+      if (cap){
+        cap.parts.push(new Float32Array(inp)); cap.left-=inp.length;
+        if (cap.left<=0){ const c=cap; cap=null; finishClip(c); }
+      }
+    };
+    src.connect(proc); proc.connect(ac.destination);
+    setOn('mic');
+    const nyq = sr/2;
+    if (nyq>=19000){
+      setOn('ult');
+      const hl=$('hline'); hl.style.top=((1-20000/nyq)*100)+'%'; hl.style.display=nyq>20500?'block':'none';
+    } else setVal('ult','Mic too limited');
+  }catch(e){ setVal('mic','Mic blocked'); setVal('ult','Mic blocked'); }
+}
+function micSample(){
+  if (!analyser) return;
+  analyser.getFloatTimeDomainData(buf);
+  let s=0; for (const x of buf) s+=x*x;
+  SENSORS.mic.value = Math.max(0, 20*Math.log10(Math.sqrt(s/buf.length)+1e-8)+100);
+  fa.getFloatFrequencyData(fbuf);
+  const bw = sr/2048, lo = Math.ceil(18000/bw), hi = Math.min(fbuf.length-1, Math.floor(Math.min(24000, sr/2-200)/bw));
+  if (SENSORS.ult.on && hi>lo){
+    let p=0; for (let i=lo;i<=hi;i++) p+=Math.pow(10,fbuf[i]/10);
+    SENSORS.ult.value = Math.max(0, 10*Math.log10(p/(hi-lo+1)+1e-20)+140);
+  }
+  drawSpec();
+}
+function drawSpec(){
+  const c=$('spec'), r=devicePixelRatio||1, w=c.clientWidth, h=c.clientHeight;
+  const g=c.getContext('2d');
+  if (c.width!==Math.round(w*r)){ c.width=Math.round(w*r); c.height=Math.round(h*r); }
+  const col=Math.max(2,Math.round(2*r));
+  g.drawImage(c,-col,0);
+  const H=c.height, n=fbuf.length;
+  for (let y=0;y<H;y++){
+    const bin=Math.min(n-1,Math.floor((1-y/H)*n));
+    const t=Math.min(1,Math.max(0,(fbuf[bin]+125)/85));
+    g.fillStyle=`hsl(${260-t*215},${60+t*30}%,${4+t*58}%)`;
+    g.fillRect(c.width-col,y,col,1);
+  }
+}
+function finishClip(c){
+  let len=0; for (const p of c.parts) len+=p.length;
+  const all=new Float32Array(len); let o=0; for (const p of c.parts){ all.set(p,o); o+=p.length; }
+  const dv=new DataView(new ArrayBuffer(44+len*2));
+  const ws=(off,str)=>{ for(let i=0;i<str.length;i++) dv.setUint8(off+i,str.charCodeAt(i)); };
+  ws(0,'RIFF'); dv.setUint32(4,36+len*2,true); ws(8,'WAVE'); ws(12,'fmt ');
+  dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+  dv.setUint32(24,sr,true); dv.setUint32(28,sr*2,true); dv.setUint16(32,2,true); dv.setUint16(34,16,true);
+  ws(36,'data'); dv.setUint32(40,len*2,true);
+  for (let i=0;i<len;i++){ const v=Math.max(-1,Math.min(1,all[i])); dv.setInt16(44+i*2,v<0?v*0x8000:v*0x7fff,true); }
+  const a=document.createElement('audio');
+  a.controls=true; a.src=URL.createObjectURL(new Blob([dv],{type:'audio/wav'}));
+  const b=document.createElement('button'); b.className='slow'; b.textContent='Play 4x slower';
+  b.onclick=()=>{
+    const slow=a.playbackRate===1;
+    a.playbackRate=slow?0.25:1;
+    a.preservesPitch=a.mozPreservesPitch=a.webkitPreservesPitch=false;
+    b.textContent=slow?'Play normal speed':'Play 4x slower';
+    a.currentTime=0; a.play();
+  };
+  const box=c.li.querySelector('div'); box.appendChild(a); box.appendChild(b);
+  recording=false;
+}
+
+// Vibration
+let vibNow=0;
+async function startVib(){
+  try{
+    if (typeof DeviceMotionEvent!=='undefined' && DeviceMotionEvent.requestPermission){
+      if (await DeviceMotionEvent.requestPermission()!=='granted') throw 0;
+    }
+    if (!('DeviceMotionEvent' in window)) throw 0;
+    let got=false;
+    addEventListener('devicemotion',e=>{
+      const a=e.acceleration, ag=e.accelerationIncludingGravity;
+      let m;
+      if (a && a.x!=null) m=Math.hypot(a.x,a.y,a.z);
+      else if (ag && ag.x!=null) m=Math.abs(Math.hypot(ag.x,ag.y,ag.z)-9.81);
+      if (m==null) return;
+      vibNow=Math.max(vibNow*0.8,m);
+      if (!got){got=true;setOn('vib');}
+    });
+    setTimeout(()=>{ if(!got) setVal('vib','Not available'); },1500);
+  }catch(e){ setVal('vib','Not available'); }
+}
+
+// Magnetometer
+function startMag(){
+  try{
+    if (!('Magnetometer' in window)) throw 0;
+    const m = new Magnetometer({frequency:10});
+    m.addEventListener('reading',()=>{ SENSORS.mag.value=Math.hypot(m.x,m.y,m.z); if(!SENSORS.mag.on) setOn('mag'); });
+    m.addEventListener('error',()=>setVal('mag','Not supported here'));
+    m.start();
+  }catch(e){ setVal('mag','Not supported here'); }
+}
+
+// Vision: Tesla-style object detection
+let model=null;
+const lastSeen={}, lastLogged={};
+const WATCH=new Set(['person','dog','cat','bird','horse','cow','sheep','bear']);
+const NAME=c=>c==='person'?'Human':c.charAt(0).toUpperCase()+c.slice(1);
+const vis=t=>$('visStatus').textContent=t;
+async function startVision(){
+  if (!SENSORS.cam.on){ vis('Vision needs the camera.'); return; }
+  const v2=$('v2'); v2.srcObject=video.srcObject; try{ await v2.play(); }catch(e){}
+  if (typeof cocoSsd==='undefined'){ vis('Detector could not load. Open the GitHub link in Chrome instead.'); return; }
+  vis('Loading detector, about 5 MB…');
+  try{
+    model=await cocoSsd.load({base:'lite_mobilenet_v2'});
+    vis('Watching'); detectLoop();
+  }catch(e){ vis('Detector could not load. Open the GitHub link in Chrome instead.'); }
+}
+async function detectLoop(){
+  if (!running) return;
+  if (video.videoWidth){
+    try{
+      const preds=await model.detect(video,10,0.5);
+      drawBoxes(preds); handleDetections(preds);
+    }catch(e){}
+  }
+  setTimeout(detectLoop,250);
+}
+function drawBoxes(preds){
+  const c=$('ov'), r=devicePixelRatio||1, W=c.clientWidth, H=c.clientHeight;
+  if (c.width!==Math.round(W*r)){ c.width=Math.round(W*r); c.height=Math.round(H*r); }
+  const g=c.getContext('2d'); g.setTransform(r,0,0,r,0,0); g.clearRect(0,0,W,H);
+  const vw=video.videoWidth, vh=video.videoHeight, k=Math.min(W/vw,H/vh), ox=(W-vw*k)/2, oy=(H-vh*k)/2;
+  g.font='600 13px Figtree,system-ui,sans-serif'; g.lineWidth=2;
+  for (const p of preds){
+    const [x,y,w,h]=p.bbox, X=ox+x*k, Y=oy+y*k;
+    const col=p.class==='person'?'#e5566b':WATCH.has(p.class)?'#f2b84b':'#6fc3b2';
+    g.strokeStyle=col; g.strokeRect(X,Y,w*k,h*k);
+    const label=`${NAME(p.class)} ${Math.round(p.score*100)}%`, tw=g.measureText(label).width+10;
+    const ly=Y>20?Y-20:Y;
+    g.fillStyle=col; g.fillRect(X-1,ly,tw,20);
+    g.fillStyle='#16132a'; g.fillText(label,X+4,ly+14);
+  }
+}
+function handleDetections(preds){
+  const now=performance.now(), counts={};
+  for (const p of preds){ counts[p.class]=(counts[p.class]||0)+1; }
+  const summary=Object.entries(counts).map(([c,n])=>`${NAME(c)} ${n}`).join(', ');
+  vis(summary?`Seeing: ${summary}`:'Watching, nothing detected');
+  for (const c in counts){
+    if (WATCH.has(c) && now-(lastSeen[c]||0)>4000 && now-(lastLogged[c]||0)>8000){
+      lastLogged[c]=now;
+      const best=Math.max(...preds.filter(p=>p.class===c).map(p=>p.score));
+      addLog(`<strong>${NAME(c)}</strong> seen by camera, ${Math.round(best*100)}% sure`);
+    }
+    lastSeen[c]=now;
+  }
+}
+
+// Scoring
+function calibrate(){
+  calUntil = performance.now()+CAL_MS;
+  for (const k in SENSORS) SENSORS[k].samples=[];
+}
+function color(t){
+  const v=getComputedStyle(document.documentElement);
+  return t<.34?v.getPropertyValue('--calm'):t<.67?v.getPropertyValue('--lantern'):v.getPropertyValue('--alert');
+}
+function logEvent(k,val){
+  const s=SENSORS[k];
+  addLog(`<strong>${s.label}</strong> spike: ${s.fmt(val)} ${s.unit}`);
+}
+function addLog(text){
+  $('empty').style.display='none';
+  const li=document.createElement('li');
+  let img='';
+  if (SENSORS.cam.on && video.videoWidth){
+    snap.getContext('2d').drawImage(video,0,0,160,120);
+    img=`<img alt="Snapshot at the moment of the flag" src="${snap.toDataURL('image/jpeg',.6)}">`;
+  }
+  li.innerHTML=`${img}<div><div>${text}</div><time>${new Date().toLocaleTimeString()}</time></div>`;
+  $('log').prepend(li);
+  if (ring && !recording){
+    recording = true;
+    const pre = new Float32Array(ring.length);
+    pre.set(ring.subarray(ringPos)); pre.set(ring.subarray(0,ringPos), ring.length-ringPos);
+    cap = {parts:[pre], left:sr*3, li};
+  }
+  while ($('log').children.length>30) $('log').lastChild.remove();
+}
+function tick(){
+  if (!running) return;
+  camSample(); micSample();
+  if (SENSORS.vib.on) SENSORS.vib.value=vibNow;
+  const now=performance.now(), cal=now<calUntil;
+  let top=0;
+  for (const k in SENSORS){
+    const s=SENSORS[k]; if (!s.on || s.value==null) continue;
+    const el=$('s-'+k), fill=el.querySelector('.fill');
+    if (cal){
+      s.samples.push(s.value);
+      setVal(k,`${s.fmt(s.value)} ${s.unit}`);
+      fill.style.width='0%'; continue;
+    }
+    if (s.samples.length){
+      const n=s.samples.length, mean=s.samples.reduce((a,b)=>a+b,0)/n;
+      s.mean=mean; s.std=Math.max(MIN_STD[k],Math.sqrt(s.samples.reduce((a,b)=>a+(b-mean)**2,0)/n));
+      s.samples=[];
+    }
+    const z=Math.abs(s.value-s.mean)/s.std, level=Math.min(1,Math.max(0,(z-zTrig*0.3)/zTrig));
+    top=Math.max(top,level);
+    fill.style.width=(level*100)+'%'; fill.style.background=color(level);
+    setVal(k,`${s.fmt(s.value)} ${s.unit}`);
+    if (z>zTrig && now-s.lastEvent>3000){ s.lastEvent=now; logEvent(k,s.value); }
+  }
+  const aura=$('aura');
+  if (cal){
+    $('state').textContent=`Calibrating, hold still ${Math.ceil((calUntil-now)/1000)}s`;
+    $('score').textContent='…';
+    aura.style.setProperty('--glow','transparent');
+  }else{
+    const pct=Math.round(top*100);
+    $('score').textContent=pct;
+    $('state').textContent=pct<34?'Normal':pct<67?'Something changed':'Strong spike';
+    aura.style.setProperty('--glow',color(top));
+    aura.style.setProperty('--blur',(10+top*60)+'px');
+    aura.style.setProperty('--spread',(top*10)+'px');
+    hist.push(top); if (hist.length>860) hist.shift();
+    drawTL();
+  }
+}
+function drawTL(){
+  const c=$('tl'), r=devicePixelRatio||1, w=c.clientWidth, h=c.clientHeight;
+  if (c.width!==w*r){ c.width=w*r; c.height=h*r; }
+  const g=c.getContext('2d'); g.setTransform(r,0,0,r,0,0); g.clearRect(0,0,w,h);
+  const step=w/860, off=860-hist.length;
+  hist.forEach((v,i)=>{
+    if (v<0.02) return;
+    g.fillStyle=color(v);
+    g.fillRect((off+i)*step,h-v*(h-4),Math.max(1,step),v*(h-4));
+  });
+}
+
+$('startBtn').onclick=async()=>{
+  if (running){
+    running=false; location.reload(); return;
+  }
+  $('err').textContent='';
+  if (!navigator.mediaDevices){ $('err').textContent='Camera and microphone need a secure (https) page in a mobile browser.'; }
+  await startVib();            // must run first inside the tap for iPhone permission
+  if (navigator.mediaDevices){ await startCam(); await startMic(); }
+  startMag();
+  running=true; $('aura').classList.add('live');
+  $('startBtn').textContent='Stop'; $('recalBtn').disabled=false;
+  calibrate(); setInterval(tick,70);
+  startVision();
+  if (!SENSORS.cam.on && !SENSORS.mic.on) $('err').textContent='Camera and mic were blocked. Allow them in your browser\u2019s site settings, then start again.';
+};
+$('recalBtn').onclick=calibrate;
+</script>
+</body>
+</html>
